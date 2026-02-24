@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Environment variables and secrets
+.env
+.env.local
+*.key
+*.pem
+
+# Data cache (adjust as needed)
+data/opencompass_cache/*.json
+data/opencompass_cache/*.csv
+!data/opencompass_cache/.gitkeep
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# Logs
+*.log
+logs/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Test outputs
+*.output
+*.result
+
+# Virtual environment
+venv/
+env/
+.venv/
