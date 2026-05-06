@@ -1,10 +1,5 @@
 # STAR: Bridging Statistical and Agentic Reasoning for Large Model Performance Prediction
 
-<p align="center">
-  <a href="https://arxiv.org/abs/2602.12143"><img src="https://img.shields.io/badge/arXiv-2602.12143-b31b1b.svg" alt="arXiv"></a>
-  <a href="https://github.com/xiaoxiaostudy/star"><img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License"></a>
-  <a href="https://www.python.org/downloads/release/python-3100/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
-</p>
 
 > **STAR** (**S**emantic-enhanced **T**wo-stage **A**gent for model pe**R**formance prediction) bridges data-driven **ST**atistical expectations with knowledge-driven **A**gentic **R**easoning to predict LLM benchmark performance from extremely sparse observations.
 
@@ -201,15 +196,7 @@ Two-step reasoning:
 
 Final prediction = CPMF statistical expectation + credibility-weighted adjustment Δ
 
-## 📝 Citation
 
-```bibtex
-@article{star2026,
-  title={STAR: Bridging Statistical and Agentic Reasoning for Large Model Performance Prediction},
-  journal={arXiv preprint arXiv:2602.12143},
-  year={2026}
-}
-```
 
 ## 📄 Related Work
 
