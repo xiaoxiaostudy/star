@@ -662,59 +662,39 @@ def extract_rank_similar_models_evidence(
 
     #print("ref_models_text:", ref_models_text)
 
-    prompt = f"""You are an AI model performance analysis expert. Compare the target model with similarly-ranked models and predict the target model's appropriate ranking position.
+    # ------------------------------------------------------------------
+    # Step 2: Cross-Model Comparison Prompt
+    # Operationalizes EVT's violation-detection sub-process:
+    # the LLM contrasts the target with capability-similar models to
+    # detect whether the CPMF prior is plausibly over- or under-estimated.
+    # ------------------------------------------------------------------
+    prompt = f"""You are checking whether the CPMF prior for a newly released model is consistent with observations from capability-similar models.
 
-    ## Target Model
-    {model_name}
+    Target: {model_name} on {benchmark_name}
     - Organization: {target_org} (Size: {target_org_profile.get('size', 'unknown')})
     - Parameters: {target_params}
     - Release Date: {target_release_date}
-    - Vision Model: {target_vision} 
-    - Language Model: {target_llm} 
+    - Vision Model: {target_vision}
+    - Language Model: {target_llm}
 
-    ## CPMF Statistical Prediction
-    Predicted Score: {cpmf_pred_norm:.1f} (Expected Rank: ~{pred_rank})
-    Note: All scores are normalized to 0-100 range
+    CPMF prior prediction: {cpmf_pred_norm:.1f} (expected rank ~{pred_rank} of {len(bench_data)}; all scores normalized to 0-100)
 
-    ## Target Benchmark
-    {benchmark_name} 
-
-    ## Similarly-Ranked Reference Models (Rank {rank_min}-{rank_max})
+    Capability-similar models (top-k models with cosine similarity > tau in observed performance vectors) and their scores on {benchmark_name}:
     {chr(10).join(ref_models_text)}
 
-    ## Analysis Task
-    Compare the target model with reference models across the following dimensions to determine whether the target model should rank higher or lower than the CPMF prediction:
+    Task: Compare the CPMF prediction against this peer group. Consider:
+    - What is the observed score range and median among peers?
+    - Does the CPMF prior fall within, above, or below this peer range?
+    - Could any peer-target capability gap (e.g., domain specialization, parameter count, training data scale) explain a deviation from peers?
 
-    1. **Organization Background**: Large/small company, technical expertise
-    2. **Vision Encoder**: Component source, architectural characteristics
-    3. **Language Model**: Component source, architectural characteristics, parameter count
-    4. **Parameters**: Comparison with similarly-ranked models' parameter counts
-    5. **Training Paradigm Inference**: Infer training data and methodology differences based on company background
-    6. **Release Date**: Newer models typically use more advanced techniques and training methods, later releases may perform better
-
-    ## Output Format (JSON)
+    Return a JSON object with the following fields:
     ```json
     {{
-        "comparison_summary": {{
-            "org_comparison": "Target org vs reference model orgs comparison conclusion",
-            "vision_comparison": "Vision Encoder comparison conclusion", 
-            "llm_comparison": "Language Model comparison conclusion",
-            "param_comparison": "Parameter count comparison conclusion",
-            "time_comparison": "Release date comparison conclusion (how much newer/older the target model is)"
-        }},
-        "inferred_training_diff": "Inferred training paradigm differences",
-        "rank_adjustment": {{
-            "direction": "higher/lower/same",
-            "magnitude": "Adjustment magnitude description (e.g., 1-2 ranks, 3-5 ranks)",
-            "reason": "Adjustment reason"
-        }},
-        "score_adjustment": {{
-            "direction": "up/down/neutral",
-            "magnitude": "Score adjustment magnitude (e.g., 0.5-2 points)",
-            "reason": "Brief reason"
-        }},
-        "confidence": "high/medium/low",
-        "reasoning": "Comprehensive analysis (2-3 sentences)"
+        "peer_score_range": [<min>, <median>, <max>],
+        "deviation_flag": "overestimate | underestimate | consistent",
+        "deviation_magnitude": "estimated points difference from peer median",
+        "capability_gap_analysis": "textual analysis of why the target may differ from peers",
+        "reasoning": "brief justification"
     }}
     ```
 
@@ -863,46 +843,45 @@ def extract_family_evolution_evidence(
     - Credibility: {org_profile.get('credibility', 0.5):.2f}
     - Specialties: {', '.join(org_profile.get('specialties', []))}"""
         
-    prompt = f"""You are an AI model architecture analysis expert. Analyze the architecture evolution within the same model series and assess the impact of new architectures on benchmark performance.
+    # ------------------------------------------------------------------
+    # Step 1: Intra-Family Analysis Prompt
+    # Operationalizes EVT's expectation-grounding sub-process:
+    # the LLM positions the target model within its family lineage,
+    # examining architectural evolution and identifying reference
+    # scores from observed family members.
+    # ------------------------------------------------------------------
+    prompt = f"""You are analyzing the expected performance of a newly released model on a benchmark, given its family lineage.
 
-    ## Target Model
-    {model_name}
-    - Vision Model: {target_vision or 'N/A'}
-    - Language Model: {target_llm or 'N/A'}
-    - Parameters: {model_info.get('parameters', 'N/A')}
+    Target: {model_name} on {benchmark_name}
+    CPMF prior prediction: (provided downstream; this step only positions the target within its family)
+    Statistical uncertainty: (provided downstream)
+
+    Model technical summary (filtered to remove benchmark scores):
+    {chr(10).join(component_knowledge)}
 
     {org_desc}
 
-    ## Target Benchmark
+    Target benchmark:
     {bench_desc}
 
-    ## Same-Series Model Architecture Comparison (sorted by date)
+    Family members and their observed scores on {benchmark_name}:
     {chr(10).join(arch_comparison)}
 
-    ## Component Technical Information
-    {chr(10).join(component_knowledge)}
+    Task: Analyze the target model's expected position within its family. Consider:
+    - How does the target's architecture / training paradigm differ from its predecessors?
+    - Does the family show a consistent scaling or improvement trend on this benchmark category?
+    - Are there architectural changes (e.g., new vision encoder, new training data, new alignment procedure) that would specifically affect performance on {benchmark_name}?
 
-    ## Analysis Points
-    1. Identify architectural changes between models in the same series (vision model or language model upgrades)
-    2. Analyze the historical impact trends of these architectural changes on benchmark performance
-    3. Consider organization background:
-    - If the benchmark involves Chinese language ability, Chinese companies may have an advantage
-    - Large companies typically have more training resources and data
-    - Match between the company's technical specialties and the benchmark
-    4. Predict the target model's performance changes compared to other models in the series
-
-    ## Output Format (JSON)
+    Return a JSON object with the following fields:
     ```json
     {{
-        "architecture_changes": [
-            {{"from": "old_component", "to": "new_component", "component_type": "vision/llm", "improvement_type": "parameter increase/architecture upgrade/training improvement"}}
+        "reference_scores": [
+            {{"model": "...", "score": 0.0, "relevance": "high/medium/low"}}
         ],
-        "performance_trend": "improving/stable/declining",
-        "trend_evidence": ["Trend evidence from historical data"],
-        "org_factor": "Analysis of organization background's impact on this benchmark's performance",
-        "expected_improvement": "Expected performance change description based on architecture changes and organization background",
-        "confidence": "high/medium/low",
-        "reasoning": "1-2 sentences explaining the reasoning process"
+        "architectural_deltas": "textual description of how target differs from predecessors",
+        "expected_direction": "up | down | stable",
+        "magnitude_hint": "small (<2 points) | moderate (2--5) | large (>5)",
+        "reasoning": "brief justification grounded in retrieved evidence"
     }}
     ```
 
@@ -1189,112 +1168,78 @@ def semantic_adjustment(
     """
     #print("score_matrix_text: ", score_matrix_text)
     
-    prompt1 = f"""You are an AI model performance prediction expert. Adjust the statistical prediction based on evidence.
+    # ------------------------------------------------------------------
+    # Step 3: Credibility-Aware Aggregation Prompt
+    # Operationalizes EVT's credibility-weighted update: the LLM
+    # synthesizes A_1 (intra-family analysis), A_2 (cross-model
+    # comparison), and sigma_{mn} into the adjustment Delta_{mn},
+    # credibility weight w_{mn}, and explanation E_{mn}.
+    # The prompt explicitly encodes the source authority hierarchy
+    # that drives EVT's credibility weighting.
+    # Final prediction is computed downstream as:
+    #     R_tilde_{mn} = R_hat_{mn} + w * Delta
+    # ------------------------------------------------------------------
+    # Extract evidence channels (A1, A2) from the upstream LLM evidence dict
+    a1_intra_family = (llm_evidence or {}).get('family_evolution', llm_evidence)
+    a2_cross_model = (llm_evidence or {}).get('rank_similar', None)
 
-    ## Task
-    Predict the performance of model "{model_name}" on benchmark "{benchmark_name}"
+    prompt1 = f"""You are producing the final adjustment to a CPMF benchmark score prediction, integrating two evidence channels under EVT principles.
 
-    ## Important Note
-    **All scores are normalized to 0-100 range** for unified judgment. Adjustment magnitudes should also be based on the 0-100 range.
+    Target: {model_name} on {benchmark_name}
+    CPMF prior prediction (R_hat): {cpmf_pred:.2f}
+    Statistical uncertainty (sigma_mn): {cpmf_uncertainty:.2f}
+    Note: All scores are normalized to 0-100 range.
 
-    ## Statistical Prediction Baseline
-    CPMF Prediction: {cpmf_pred:.2f} ± {cpmf_uncertainty:.2f} (normalized to 0-100)
-    - Uncertainty {cpmf_uncertainty:.2f} represents the CPMF model's confidence interval for this prediction
-    - Higher uncertainty means CPMF is less certain, allowing more room for semantic adjustment
-    - Lower uncertainty means CPMF prediction is more reliable, adjustments should be more conservative
-
-    ## Evidence 1: Same-Series Model Historical Scores (normalized to 0-100)
+    Reference scores (same-series / family observed scores on {benchmark_name}):
     {score_matrix_text if score_matrix_text else 'No reference data'}
 
-    ## Evidence 2: Model Evidence Analysis
-    {llm_evidence}
+    Evidence channel 1 (intra-family analysis, A_1):
+    {a1_intra_family}
 
-    ## Note:
-    Analyze from the following dimensions: historical performance,
-    organization (e.g., non-Chinese companies may perform poorly on Chinese benchmarks, large tech companies tend to produce stronger models),
-    architecture (stronger vision encoder leads to better visual capabilities, MPO improves model performance, etc.),
-    training data volume (additional code data introduction strengthens coding performance),
-    training paradigm (RLHF introduction improves model performance compared to predecessors),
-    parameter count, etc.
+    Evidence channel 2 (cross-model comparison, A_2):
+    {a2_cross_model if a2_cross_model is not None else 'Not available'}
 
-    ## Evidence Priority Rules (Extremely Important!)
-    When evidence conflicts, judge by the following priority:
-    1. **rank_similar (similarly-ranked model comparison) has the highest priority**:
-       - Based on actual scores of models with **similar parameter scales**, this is the most reliable evidence
-       - If multiple models with similar parameters score in a certain range, the target model is likely in that range too
-    2. **family_evolution (same-series evolution) has secondary priority**:
-       - With only 1-2 reference points, linear extrapolation may be inaccurate
-       - Do not simply estimate scores by parameter ratio (e.g., 16B→3B does not equal 81% score decrease)
-    3. **CPMF prediction** is the statistical baseline; trust it when there is insufficient evidence to refute it
-    
-    ## Key Check (Must Execute)
-    - If rank_similar shows "similar parameter models score in X-Y range" while family_evolution gives a very different conclusion, **prioritize rank_similar**
+    Task: Produce two outputs that capture distinct judgments:
+    - Delta (adjustment): what correction should be applied to the CPMF prior. May be positive, negative, or zero.
+    - w (credibility weight, in [0, 1]): how reliable this correction is, controlling how much of Delta to apply.
 
-    ## Adjustment Magnitude Guide
-    - Adjustment should make final_prediction consistent with the most reliable evidence (rank_similar)
-    - Adjustment range: small ±0.5-2 points, medium ±2-5 points, large ±5-10 points
-    - Adjustments exceeding ±10 points require very strong evidence support (multiple actual data points)
+    Source authority hierarchy (use this to weight evidence):
+      1. Tier 1 (highest): Official technical reports, peer-reviewed papers
+      2. Tier 2: HuggingFace model cards, official documentation
+      3. Tier 3: Community posts, blog posts, third-party reviews
 
-    ## Requirements
-    1. First analyze the expected score range for the target model
-    2. Calculate adjustment = expected score - CPMF prediction
-    3. Ensure final_prediction is consistent with the analysis conclusion
+    Set w HIGHER when:
+    - Multiple sources converge on consistent conclusions, especially across tiers.
+    - Direct family reference scores are available (e.g., a sibling model with documented behavior on the same benchmark).
+    - sigma_mn is high, indicating the CPMF prior is uncertain and leaves room for evidence-based correction.
 
-    ## Output Format (JSON)
+    Set w LOWER when:
+    - Evidence comes only from Tier 3 sources without corroboration.
+    - Channels 1 and 2 disagree on the direction or magnitude of correction.
+    - sigma_mn is low, indicating CPMF is already confident and external evidence should not override it.
+
+    Return a JSON object with the following fields:
     ```json
     {{
-        "expected_score_range": {{"low": <expected_lower_bound>, "high": <expected_upper_bound>}},
-        "analysis": "Analysis based on Evidence 1 and Evidence 2 (4-5 sentences)",
-        "adjustment": <adjustment value delta, should make final_prediction fall within expected range>,
-        "final_prediction": <{cpmf_pred:.2f} + delta>,
-        "confidence": "high/medium/low"
+        "delta": <signed numeric value, the correction Delta>,
+        "credibility_weight": <float in [0, 1], the weight w>,
+        "evidence_summary": [
+            {{"source": "...", "tier": 1, "claim": "..."}}
+        ],
+        "explanation": "natural-language rationale traceable to specific evidence items",
+        "adjustment": <same signed value as delta; kept for downstream compatibility>,
+        "final_prediction": <{cpmf_pred:.2f} + credibility_weight * delta>,
+        "confidence": "high/medium/low",
+        "analysis": "brief overall analysis (mirrors explanation; kept for downstream compatibility)"
     }}
     ```
 
+    The final prediction will be computed as R_tilde_mn = R_hat_mn + w * Delta.
     Output JSON only."""
 
-    prompt2 = f"""You are an AI model performance prediction expert. Adjust the statistical prediction based on evidence.
-
-    ## Task
-    Predict the performance of model "{model_name}" on benchmark "{benchmark_name}"
-
-    ## Statistical Prediction Baseline
-    CPMF Prediction: {cpmf_pred:.2f} ± {cpmf_uncertainty:.2f}
-
-    ## Evidence 1: Same-Series Model Historical Scores
-    {score_matrix_text if score_matrix_text else 'No reference data'}
-
-    ## Evidence 2: Model Evidence Analysis
-    {llm_evidence}
-
-    ## ⚠️ Step 1: Direction Verification (must complete first)
-    Before making any adjustment, answer the following question:
-    Is the CPMF prediction too low, too high, or just right?
-
-    ## ⚠️ Step 2: Magnitude Judgment
-    Provide the specific adjustment magnitude delta and the reason for the adjustment.
-
-    ## Evidence Priority (strictly follow)
-    1. **Actual scores of models with similar parameters in rank_similar** → Highest priority
-    2. **Historical scores of same-series models on this benchmark** → Second highest priority  
-    3. **CPMF prediction** → Default when the above evidence is insufficient
-    4. **Organization background/brand inference** → Lowest priority
-
-
-    ## Output Format (JSON)
-    {{
-        "direction_check": {{
-            "cpmf_position": "within range/above range/below range",
-            "recommended_direction": "up/down/keep"
-        }},
-        "expected_score_range": {{"low": <expected_lower_bound>, "high": <expected_upper_bound>}},
-        "analysis": "Analysis based on direction check and evidence (3-4 sentences, must cite specific numbers)",
-        "adjustment": <adjustment value delta>,
-        "final_prediction": <{cpmf_pred:.2f} + delta>,
-        "confidence": "high/medium/low"
-        "reasoning": "Adjustment reason (3-4 sentences)"
-    }}
-    Output JSON only."""
+    # prompt2 retained for backward compatibility (not currently invoked).
+    # It mirrors prompt1 under the same EVT credibility-weighted update formulation.
+    prompt2 = prompt1
 
     try:
         response = client.chat.completions.create(
@@ -1329,17 +1274,36 @@ def semantic_adjustment(
             return None
         
         data = json.loads(json_str)
-        
-        # Extract adjustment value
-        adjustment = float(data.get("adjustment", 0))
+
+        # Extract Delta and credibility weight w under EVT principles.
+        # Final prediction: R_tilde_mn = R_hat_mn + w * Delta
+        # Fallbacks preserve backward compatibility with the older field name.
+        delta = data.get("delta", data.get("adjustment", 0))
+        try:
+            delta = float(delta)
+        except (TypeError, ValueError):
+            delta = 0.0
+
+        w = data.get("credibility_weight", 1.0)
+        try:
+            w = float(w)
+        except (TypeError, ValueError):
+            w = 1.0
+        # Clamp w to [0, 1] as specified in the prompt.
+        w = max(0.0, min(1.0, w))
+
+        adjustment = w * delta
         final_pred = cpmf_pred + adjustment
-        
+
         return {
             "predicted_score": final_pred,
             "cpmf_prediction": cpmf_pred,
             "adjustment": adjustment,
+            "delta": delta,
+            "credibility_weight": w,
             "confidence": str(data.get("confidence", "medium")),
-            "analysis": str(data.get("analysis", "")),
+            "analysis": str(data.get("explanation", data.get("analysis", ""))),
+            "evidence_summary": data.get("evidence_summary", []),
         }
         
     except Exception as e:
